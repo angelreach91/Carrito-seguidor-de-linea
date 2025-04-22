@@ -1,0 +1,80 @@
+#define NUM_SENSORES 8
+int pinesSensores[NUM_SENSORES] = {32, 33, 34, 35, 36, 39, 38, 37};
+
+// Pines motores
+int AIN1 = 14, AIN2 = 27, PWMA = 13;
+int BIN1 = 26, BIN2 = 25, PWMB = 12;
+int STBY = 33;
+
+float Kp = 20.0;
+float Ki = 0.0;
+float Kd = 10.0;
+
+float error = 0, errorAnterior = 0, integral = 0;
+
+int velocidadBase = 120; // Ajusta a tus motores
+
+void setup() {
+  Serial.begin(115200);
+
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    pinMode(pinesSensores[i], INPUT);
+  }
+
+  pinMode(AIN1, OUTPUT); pinMode(AIN2, OUTPUT);
+  pinMode(BIN1, OUTPUT); pinMode(BIN2, OUTPUT);
+  pinMode(PWMA, OUTPUT); pinMode(PWMB, OUTPUT);
+  pinMode(STBY, OUTPUT);
+
+  digitalWrite(STBY, HIGH); // Activar driver
+}
+
+void loop() {
+  int lecturas[NUM_SENSORES];
+  int sumaLecturas = 0, sumaPonderada = 0;
+
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    lecturas[i] = analogRead(pinesSensores[i]);
+    sumaLecturas += lecturas[i];
+    sumaPonderada += lecturas[i] * i;
+  }
+
+  if (sumaLecturas == 0) {
+    // Línea perdida: puedes detener o girar
+    detener();
+    return;
+  }
+
+  float posicion = (float)sumaPonderada / sumaLecturas;
+  error = 3.5 - posicion; // Centro ideal = 3.5 (entre sensor 3 y 4)
+
+  integral += error;
+  float derivada = error - errorAnterior;
+  float salida = Kp * error + Ki * integral + Kd * derivada;
+  errorAnterior = error;
+
+  int velocidadIzq = constrain(velocidadBase + salida, 0, 255);
+  int velocidadDer = constrain(velocidadBase - salida, 0, 255);
+
+  moverMotorA(velocidadIzq);
+  moverMotorB(velocidadDer);
+
+  delay(10);
+}
+
+void moverMotorA(int velocidad) {
+  digitalWrite(AIN1, velocidad > 0);
+  digitalWrite(AIN2, velocidad <= 0);
+  analogWrite(PWMA, abs(velocidad));
+}
+
+void moverMotorB(int velocidad) {
+  digitalWrite(BIN1, velocidad > 0);
+  digitalWrite(BIN2, velocidad <= 0);
+  analogWrite(PWMB, abs(velocidad));
+}
+
+void detener() {
+  analogWrite(PWMA, 0);
+  analogWrite(PWMB, 0);
+}
